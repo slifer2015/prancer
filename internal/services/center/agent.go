@@ -2,21 +2,21 @@ package center
 
 import (
 	"fmt"
-	"sync"
 	"time"
+
+	cmap "github.com/orcaman/concurrent-map"
 )
 
 const (
-	startAgentsCount = 10
+	speedInMilliSecondsPerMeter float64 = 1000
 )
 
 type Agents struct {
-	agents map[int]agent
-	l      sync.RWMutex
+	agents cmap.ConcurrentMap
 }
 
 type agent struct {
-	id    int
+	id    string
 	ready bool
 	pos   Point
 
@@ -24,37 +24,38 @@ type agent struct {
 	distance float64
 }
 
-func (a *Agents) SetReadiness(id int, ready bool) {
-	a.l.Lock()
-	defer a.l.Unlock()
-	tmp := a.agents[id]
-	tmp.ready = ready
-	a.agents[id] = tmp
-}
-
-func (a *Agents) SetPoint(id int, p Point) {
-	a.l.Lock()
-	defer a.l.Unlock()
-	tmp := a.agents[id]
-	tmp.pos = p
-	a.agents[id] = tmp
-}
-
-func (s *service) AgentToPoint(a agent, p Point) {
-	s.agents.SetReadiness(a.id, false)
-	fmt.Printf("agents %d moving towards point\n", a.id)
-	// TODO : for half second
-	for i := 0; i < int(a.distance); i++ {
-		time.Sleep(1 * time.Second)
-		fmt.Printf("agents %d moving to point, distance : %d\n", a.id, int(a.distance)-(i+1))
+func (s *service) agentToPoint(id string, p Point) {
+	currentAgent, ok := s.agents.Get(id)
+	if !ok {
+		panic("agent not exists")
+	}
+	castedAgent, ok := currentAgent.(*agent)
+	if !ok {
+		panic("agent type not valid")
 	}
 
-	s.agents.SetPoint(a.id, p)
-	s.agents.SetReadiness(a.id, true)
-	fmt.Printf("agents %d is ready now\n", a.id)
-}
+	// make agent busy
+	s.logger.Info(fmt.Sprintf("agents %s moving towards point\n , distance is = %f", castedAgent.id, castedAgent.distance))
 
-// InitAgents initialize agents at point (0,0)
-func (s *service) InitAgents() {
+	remainDistance := castedAgent.distance - float64(int(castedAgent.distance))
+	if int(castedAgent.distance) >= 1 {
+		times := int(castedAgent.distance)
+		for i := 0; i < times; i++ {
+			time.Sleep(time.Duration(speedInMilliSecondsPerMeter) * time.Millisecond)
+			castedAgent.distance = castedAgent.distance - 1
+			s.agents.Set(id, castedAgent)
+			s.logger.Info(fmt.Sprintf("agents %s moving towards point , distance is = %f", castedAgent.id, castedAgent.distance))
+		}
+	}
+	if remainDistance != 0 {
+		time.Sleep(time.Duration(remainDistance*speedInMilliSecondsPerMeter) * time.Millisecond)
+		castedAgent.distance = 0
+		s.agents.Set(id, castedAgent)
+		s.logger.Info(fmt.Sprintf("agents %s moving towards point , distance is = %f", castedAgent.id, castedAgent.distance))
+	}
 
+	castedAgent.pos = p
+	castedAgent.ready = true
+	s.agents.Set(id, castedAgent)
+	s.logger.Info(fmt.Sprintf("agents %s is ready now", castedAgent.id))
 }

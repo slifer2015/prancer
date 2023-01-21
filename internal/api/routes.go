@@ -16,14 +16,11 @@ func handleAssignPoint(centerService CenterService) echo.HandlerFunc {
 		if err != nil {
 			return c.JSON(http.StatusBadRequest, err)
 		}
-		err = centerService.Assign(center.Point{
+		centerService.Assign(center.Point{
 			X: in.X,
 			Y: in.Y,
 		})
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, err)
-		}
-		return c.JSON(http.StatusOK, nil)
+		return c.JSON(http.StatusOK, center.AssignPointResponse{Message: "point received"})
 	}
 }
 
